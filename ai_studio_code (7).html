@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin Panel</title>
+    <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; margin: 20px; background-color: #f4f4f9; }
+        .container { max-width: 800px; margin: auto; background: #fff; padding: 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+        h1, h2 { color: #333; }
+        input[type="text"], input[type="url"], input[type="password"], textarea { width: 100%; padding: 10px; margin: 10px 0; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box; }
+        button { background-color: #007AFF; color: white; padding: 10px 15px; border: none; border-radius: 5px; cursor: pointer; font-size: 16px; }
+        button:hover { background-color: #0056b3; }
+        .file-item { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #eee; padding: 10px 0; }
+        .file-item:last-child { border-bottom: none; }
+        .file-item strong { flex-grow: 1; }
+        .delete-btn, .edit-btn, .view-downloads-btn { background-color: #ff3b30; margin-left: 10px; font-size: 14px; padding: 8px 12px; }
+        .edit-btn { background-color: #5856d6; }
+        .view-downloads-btn { background-color: #34c759; }
+        #login-container { max-width: 400px; margin: 50px auto; padding: 30px; background: #fff; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); text-align: center; }
+        #login-container h2 { margin-top: 0; }
+    </style>
+</head>
+<body>
+
+    <div id="login-container">
+        <h2>Admin Login</h2>
+        <input type="password" id="password" placeholder="Enter Password">
+        <button onclick="login()">Login</button>
+    </div>
+
+    <div id="admin-panel" class="container" style="display: none;">
+        <h1>Admin Panel</h1>
+
+        <h2>Website Settings</h2>
+        <input type="url" id="logo-url" placeholder="Logo URL">
+        <input type="text" id="website-name" placeholder="Website Name">
+        <input type="text" id="action-text" placeholder="File sharing/view/download/open text">
+        <button onclick="saveSettings()">Save Settings</button>
+
+        <h2>Add New File Link</h2>
+        <input type="text" id="title" placeholder="Title">
+        <textarea id="description" placeholder="Description (optional)"></textarea>
+        <input type="url" id="image-link" placeholder="File Image Link">
+        <input type="url" id="file-link" placeholder="File sharing/view/download link">
+        <input type="password" id="file-password" placeholder="File Password (optional)">
+        <button onclick="addFileLink()">Add File</button>
+
+        <h2>Manage Files</h2>
+        <div id="file-list"></div>
+    </div>
+
+    <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-database.js"></script>
+    <script>
+        const firebaseConfig = {
+          apiKey: "AIzaSyDUHXK7NYeM6CLNN4fsyGVz1MpIVpJuOq0",
+          authDomain: "studio-vddd5.firebaseapp.com",
+          databaseURL: "https://studio-vddd5-default-rtdb.firebaseio.com",
+          projectId: "studio-vddd5",
+          storageBucket: "studio-vddd5.firebasestorage.app",
+          messagingSenderId: "679230106233",
+          appId: "1:679230106233:web:3d6a91cabc2264e15902a8"
+        };
+
+        firebase.initializeApp(firebaseConfig);
+        const database = firebase.database();
+
+        const ADMIN_PASSWORD = "123";
+
+        function login() {
+            const password = document.getElementById('password').value;
+            if (password === ADMIN_PASSWORD) {
+                document.getElementById('login-container').style.display = 'none';
+                document.getElementById('admin-panel').style.display = 'block';
+                loadSettings();
+                listenForFiles();
+            } else {
+                alert('Incorrect password!');
+            }
+        }
+
+        function saveSettings() {
+            database.ref('settings').set({
+                logoUrl: document.getElementById('logo-url').value,
+                websiteName: document.getElementById('website-name').value,
+                actionText: document.getElementById('action-text').value
+            }).then(() => alert('Settings saved!'))
+              .catch(error => console.error('Error saving settings: ', error));
+        }
+
+        function loadSettings() {
+            database.ref('settings').once('value').then(snapshot => {
+                if (snapshot.exists()) {
+                    const settings = snapshot.val();
+                    document.getElementById('logo-url').value = settings.logoUrl || '';
+                    document.getElementById('website-name').value = settings.websiteName || '';
+                    document.getElementById('action-text').value = settings.actionText || '';
+                }
+            });
+        }
+
+        function addFileLink() {
+            const title = document.getElementById('title').value;
+            const fileLink = document.getElementById('file-link').value;
+
+            if (!title || !fileLink) {
+                alert('Please provide a title and a file link.');
+                return;
+            }
+
+            const newFileKey = database.ref().child('files').push().key;
+            const fileData = {
+                title: title,
+                description: document.getElementById('description').value,
+                imageLink: document.getElementById('image-link').value,
+                downloadUrl: fileLink,
+                password: document.getElementById('file-password').value
+            };
+
+            database.ref('files/' + newFileKey).set(fileData).then(() => {
+                alert('File link added successfully!');
+                document.getElementById('title').value = '';
+                document.getElementById('description').value = '';
+                document.getElementById('image-link').value = '';
+                document.getElementById('file-link').value = '';
+                document.getElementById('file-password').value = '';
+            }).catch(error => console.error('Error saving file data: ', error));
+        }
+
+        function listenForFiles() {
+            const fileList = document.getElementById('file-list');
+            database.ref('files').on('value', (snapshot) => {
+                fileList.innerHTML = '';
+                if (snapshot.exists()) {
+                    snapshot.forEach((childSnapshot) => {
+                        const fileId = childSnapshot.key;
+                        const fileData = childSnapshot.val();
+                        const fileElement = document.createElement('div');
+                        fileElement.classList.add('file-item');
+                        fileElement.innerHTML = `
+                            <strong>${fileData.title}</strong>
+                            <span>
+                                <button class="view-downloads-btn" onclick="viewDownloads('${fileId}')">View Downloads</button>
+                                <button class="edit-btn" onclick="editFile('${fileId}')">Edit</button>
+                                <button class="delete-btn" onclick="deleteFile('${fileId}')">Delete</button>
+                            </span>
+                        `;
+                        fileList.appendChild(fileElement);
+                    });
+                } else {
+                    fileList.innerHTML = '<p>No files have been added yet.</p>';
+                }
+            });
+        }
+
+        function viewDownloads(fileId) {
+            database.ref(`files/${fileId}/downloads`).once('value').then(snapshot => {
+                let downloadInfo = 'Downloads for this file:\n\n';
+                if (snapshot.exists()) {
+                    snapshot.forEach(childSnapshot => {
+                        const download = childSnapshot.val();
+                        downloadInfo += `Name: ${download.userName}, Time: ${new Date(download.timestamp).toLocaleString()}\n`;
+                    });
+                } else {
+                    downloadInfo = 'No downloads recorded for this file yet.';
+                }
+                alert(downloadInfo);
+            });
+        }
+
+        function editFile(fileId) {
+            database.ref('files/' + fileId).once('value').then(snapshot => {
+                const fileData = snapshot.val();
+                const updates = {
+                    title: prompt('Enter new title:', fileData.title),
+                    description: prompt('Enter new description:', fileData.description),
+                    imageLink: prompt('Enter new image link:', fileData.imageLink),
+                    downloadUrl: prompt('Enter new file link:', fileData.downloadUrl),
+                    password: prompt('Enter new file password (leave blank for no password):', fileData.password)
+                };
+
+                const finalUpdates = Object.fromEntries(Object.entries(updates).filter(([_, v]) => v !== null));
+
+                if (Object.keys(finalUpdates).length > 0) {
+                    database.ref('files/' + fileId).update(finalUpdates)
+                        .then(() => alert('File updated successfully!'))
+                        .catch(error => console.error('Error updating file: ', error));
+                }
+            });
+        }
+
+        function deleteFile(fileId) {
+            if (confirm('Are you sure you want to delete this file entry?')) {
+                database.ref('files/' + fileId).remove()
+                    .then(() => alert('File entry deleted successfully!'))
+                    .catch(error => console.error('Error deleting file data: ', error));
+            }
+        }
+    </script>
+</body>
+</html>
